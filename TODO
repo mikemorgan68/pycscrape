@@ -1,0 +1,16 @@
+
+Re do the test scripts
+
+
+parse string/file   from/to options
+
+Overview document
+
+
+1. Doxygen documentation
+2. Add Keil ARM compiler support. Note: Enum size is 1
+3. Add support for packed structs. Different compilers mark structs as packed
+   in different ways.  Need to figure out the best way to identify packed structs.
+4. Bitfields are not supported
+5. Unions are not supported
+

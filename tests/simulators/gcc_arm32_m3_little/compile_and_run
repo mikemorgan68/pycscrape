@@ -1,0 +1,210 @@
+#!/bin/bash
+
+# Compile and run a C program for ARM-M3 little endian using the gcc5 compiler and QEMU simulator.
+#
+# <script> <C files> [<C files>...]
+#
+# The script will compile all of the C files supplied on the command line,
+# using the current working folder. It will generate a results.map 
+# file and a results.txt file which is the output from the C program.
+# It will clean up all temporary files (not .c or .h)
+#
+# The script supplies the following C functions
+#     void print_str(const char *s);
+#     void print_decimal(const int x);
+#     void print_hex(const int x);
+#  
+# The current working folder can be assumed to be an empty folder.
+
+# In order for this script to work, the following must be installed.
+#
+# Install QEMU
+#  apt-get update
+#  apt-get install qemu
+# Install ARM cross compiler
+#  apt-get install libc6-armel-cross libc6-dev-armel-cross
+#  apt-get install binutils-arm-linux-gnueabi
+#  apt-get install libncurses-dev
+#  apt-get install gcc-arm-linux-gnueabi
+#
+# This script was tested on a Linux Mint 18.1 32bit virtual box.
+#
+# Lots of help from Balau
+# (https://balau82.wordpress.com/2010/02/28/hello-world-for-bare-metal-arm-using-qemu/)
+
+
+echo >startup.s '
+.global _Reset
+_Reset:
+ LDR sp, =stack_top
+ BL c_entry
+ B .
+'
+
+# Create the linker table file
+echo >test.ld '
+ENTRY(_Reset)
+SECTIONS
+{
+ . = 0x10000;
+ .startup . : { startup.o(.text) }
+ .text : { *(.text) }
+ .data : { *(.data) }
+ .bss : { *(.bss COMMON) }
+ . = ALIGN(8);
+ . = . + 0x1000; /* 4kB of stack memory */
+ stack_top = .;
+}
+'
+
+# Create the C start up file and required functions.
+echo >cstartup.c '
+#include <limits.h>
+
+volatile unsigned int * const UART0DR = (unsigned int *)0x101f1000;
+
+// Send the given character to the simulator console.
+void c_put(const char c)
+{
+    *UART0DR = (unsigned int) c; /* Transmit char */
+}
+
+// Print the given string. 
+// Required function used in tests.
+void print_str(const char *s) 
+{
+  while(*s != 0)
+  {
+    c_put(*s);
+    s++;
+  }
+}
+
+// Print the given number as a hex number. 
+// Required function used in tests.
+void print_hex(const unsigned long long int value)
+{
+    unsigned int shift = 64;
+    long long int x = value;
+    c_put("0"[0]);  // Cant use single quote
+    c_put("x"[0]);  // Cant use single quote
+    
+    do
+    {
+        shift -= 4;
+        c_put("0123456789abcdef"[15 & (x >> shift)]);
+    } while (shift != 0);
+}
+
+static long long int indices[20]; // Putting this outside of print_int means we dont need the stack protection functions.
+
+// Print the given number as a signed decimal integer. 
+// Required function used in tests.
+void print_int(const long long int value)
+{
+    // Long long division not available, so use a table
+    indices[19] = 0;
+    int i;
+    long long int x = 1;
+    for (i = 18; i >= 0; i--)
+    {
+        indices[i] = x;
+        x *= 10LL;
+    }
+
+    x = value;
+
+    if (value == (long long) 0ULL)
+    {
+        print_str("0");
+        return;
+    }
+    else if (value == (long long) 0x8000000000000000ULL)
+    {
+        // This number can not be converted to a positive number.
+        print_str("-9223372036854775808");
+        return;
+    }
+    else if (value < 0)
+    {
+        // Handle the negative case
+        c_put("-"[0]);  // Single quote not available
+        print_int(-value);
+        return;
+    }
+    int index = 0;
+    int digit_printed = 0;
+    while (indices[index] != 0)
+    {
+        int digit = 0;
+        while (x >= indices[index])
+        {
+            x -= indices[index];
+            digit++;
+            digit_printed = 1;
+        }
+        if (digit_printed)
+        {
+            c_put("01234567890"[digit]);  // Single quote not available
+        }
+        index++;
+    }
+
+
+}
+
+
+// All tests must provide a main function to be called.
+void main(void);
+
+void c_entry() 
+{
+  (void) main();                       // Run the test
+
+  print_str("\nCONFIG_NAME:arm32\n");  // Mark the test complete
+  print_str("TEST COMPLETED\n");       // Mark the test complete
+
+  // AIRCR ARM register - reset device - stops emulation - hangs but does not terminate unfortunately
+  *((volatile unsigned int*) 0xE000ED0C) = 0xfa050040;
+}
+'
+
+# By default, do not optimize for speed, but if gcc_opt_setting equals 'size', optimise for size.
+export gcc_opt=-Ofast     # Optimise for speed
+if [ "${gcc_opt_setting}" == "size" ] ; then
+    export gcc_opt=-Os    # Optimise for size
+fi
+
+# Compile startup.s and startup.c
+arm-linux-gnueabi-as     -mcpu=arm926ej-s -g startup.s  -o startup.o
+arm-linux-gnueabi-gcc -c -mcpu=arm926ej-s -g cstartup.c -o cstartup.o
+
+# Compile all files supplied on the command line
+export list=
+for file in "$@"
+do
+    arm-linux-gnueabi-gcc -c -mcpu=arm926ej-s ${gcc_opt} "${file}" -o `basename "${file: : -2}.o"`
+    export list="${list} `basename "${file: : -2}.o"`"
+done
+
+# Link and produce a hex image
+arm-linux-gnueabi-ld -T test.ld startup.o cstartup.o ${list} -o results.elf
+arm-linux-gnueabi-objcopy -O binary results.elf results.bin
+readelf --all --dyn-syms results.elf >results.map
+
+# Give details of the operating system and compiler
+uname -srvmpo                                      >results.txt
+arm-linux-gnueabi-gcc --version | head --lines=1  >>results.txt
+echo -------------------------------------------- >>results.txt
+
+# Start the simulator on a thread and append output to results.txt
+export QEMU_AUDIO_DRV=none
+qemu-system-arm -M versatilepb -m 128M -nographic -no-reboot -kernel results.bin >>results.txt &
+
+# Wait until the simulator is bound to have finished, then terminate the simulator
+sleep 2
+kill -s 15 $!
+
+# Clean up
+rm --force cstartup.* startup.* *.o results.elf results.bin test.ld
+
