@@ -1,0 +1,6 @@
+setup.cfg
+pycscrape/__init__.py
+pycscrape.egg-info/PKG-INFO
+pycscrape.egg-info/SOURCES.txt
+pycscrape.egg-info/dependency_links.txt
+pycscrape.egg-info/top_level.txt
