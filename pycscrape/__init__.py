@@ -18,7 +18,7 @@
 #
 #  FIXME - about the library and this file
 #-----------------------------------------------------------------
-__version__ = '0.0'
+__version__ = '0.07'
 
 import sys
 import os

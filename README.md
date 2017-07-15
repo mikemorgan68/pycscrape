@@ -2,7 +2,7 @@
 A Python library for gathering information from C source files.
 
 
-THIS LIBRARY IS NOT YET FINISHED.
+TODO: THIS LIBRARY IS NOT YET FINISHED. PYPI INSTALL NOT WORKING CORRECTLY.
 
 
 =========
@@ -59,10 +59,10 @@ We could write a script to print all of the Month_t enum names and values
     import pycscrape
 
     data = pycscrape.CScrape()
-    data.parse_file('main.c')  # Get info about main.c
+    data.parse_file('main.c')  # Add info from main.c to data
 
     # Print the values of all Month_t enums
-    enums = data.enum_type(typename='Month_t')
+    enums = data.enum_type(typename='Month_t') # Get a dict of all Month_t enum values
     for enum_name in enums:
         print("%s = %d" % (enum_name, enums[enum_name]['value']))
 
@@ -75,12 +75,18 @@ Do I need to supply my C source code with my python script?
 -----------------------------------------------------------
 No. PyCScrape can collate all the information it has gathered into a json data string. Scraping can
 be performed at the compilation stage and the json string created then.  Only the string needs to be
-supplied with the script.
+supplied with your script.
 
 
 Installing
 ==========
 
+Using pip
+---------
 TODO
+
+Install directly
+----------------
+PyCScrape requires pycparser.  TODO
 
 

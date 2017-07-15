@@ -3,7 +3,7 @@ from distutils.core import setup
 setup(
     name = 'pycscrape',
     packages = ['pycscrape'],
-    version = '0.01',  # Ideally should be same as your GitHub release tag varsion
+    version = '0.07',
     description = 'Initial pre-release',
     author = 'Mike Morgan',
     author_email = 'mikemorgan@blueyonder.co.uk',
